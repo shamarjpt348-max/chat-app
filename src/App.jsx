@@ -1,5 +1,5 @@
 import { Component, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Bell, Check, CheckCheck, Download, FileText, Image as ImageIcon, LogOut, MoreHorizontal, MessageCircle, Plus, Search, Send, Settings, Smile, Sparkles, Paperclip, ImagePlus, X } from 'lucide-react'
+import { ArrowLeft, Bell, Check, CheckCheck, Download, FileText, LogOut, MoreHorizontal, MessageCircle, Plus, Search, Send, Settings, Smile, Sparkles, Paperclip, ImagePlus, X } from 'lucide-react'
 import { io } from 'socket.io-client'
 import './App.css'
 
