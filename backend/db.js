@@ -51,4 +51,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_members_user ON conversation_members(user_id);
 `);
+for (const statement of [
+  "ALTER TABLE messages ADD COLUMN attachment_url TEXT",
+  "ALTER TABLE messages ADD COLUMN attachment_name TEXT",
+  "ALTER TABLE messages ADD COLUMN attachment_type TEXT",
+  "ALTER TABLE messages ADD COLUMN attachment_size INTEGER",
+]) {
+  try { db.exec(statement); } catch (error) { if (!error.message.includes('duplicate column name')) throw error; }
+}
 export function initDatabase() { db.pragma('foreign_keys = ON'); }

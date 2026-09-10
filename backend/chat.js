@@ -1,8 +1,15 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
 import { z } from 'zod';
 import { db } from './db.js';
 
 export const chatRouter = express.Router();
+const uploadDir = path.resolve('uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
+const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain', 'application/zip']);
+const upload = multer({ storage: multer.diskStorage({ destination: uploadDir, filename: (_req, file, callback) => callback(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname).toLowerCase()}`) }), limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: (_req, file, callback) => callback(null, allowedMimeTypes.has(file.mimetype)) });
 const userSelect = `SELECT u.id, u.name, u.username, u.about, u.avatar_url AS avatarUrl, u.last_seen AS lastSeen FROM users u`;
 const conversationFor = (id, userId) => {
   const conversation = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id != ? AND m.status != 'read') AS unreadCount, (SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS lastMessage, (SELECT created_at FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS lastMessageAt, (SELECT json_group_array(json_object('id', u.id, 'name', u.name, 'username', u.username, 'avatarUrl', u.avatar_url, 'about', u.about, 'lastSeen', u.last_seen)) FROM conversation_members cm JOIN users u ON u.id = cm.user_id WHERE cm.conversation_id = c.id) AS members FROM conversations c JOIN conversation_members me ON me.conversation_id = c.id WHERE c.id = ? AND me.user_id = ?`).get(userId, id, userId);
@@ -40,17 +47,18 @@ chatRouter.get('/conversations/:id/messages', (req, res) => {
   if (!isMember(req.params.id, req.user.id)) return res.status(403).json({ error: 'You do not have access to this conversation.' });
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const before = Number(req.query.before) || Number.MAX_SAFE_INTEGER;
-  const messages = db.prepare(`SELECT m.id, m.body, m.status, m.reply_to_id AS replyToId, m.created_at AS createdAt, m.sender_id AS senderId, u.name AS senderName, u.username AS senderUsername FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.conversation_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`).all(req.params.id, before, limit).reverse();
+  const messages = db.prepare(`SELECT m.id, m.body, m.status, m.reply_to_id AS replyToId, m.created_at AS createdAt, m.sender_id AS senderId, m.attachment_url AS attachmentUrl, m.attachment_name AS attachmentName, m.attachment_type AS attachmentType, m.attachment_size AS attachmentSize, u.name AS senderName, u.username AS senderUsername FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.conversation_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`).all(req.params.id, before, limit).reverse();
   db.prepare('UPDATE messages SET status = ? WHERE conversation_id = ? AND sender_id != ? AND status != ?').run('read', req.params.id, req.user.id, 'read');
   res.json({ messages });
 });
-chatRouter.post('/conversations/:id/messages', (req, res) => {
+chatRouter.post('/conversations/:id/messages', upload.single('attachment'), (req, res) => {
   if (!isMember(req.params.id, req.user.id)) return res.status(403).json({ error: 'You do not have access to this conversation.' });
-  const parsed = z.object({ body: z.string().trim().min(1).max(4000), replyToId: z.number().int().optional() }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Message cannot be empty.' });
-  const result = db.prepare('INSERT INTO messages (conversation_id, sender_id, body, reply_to_id) VALUES (?, ?, ?, ?)').run(req.params.id, req.user.id, parsed.data.body, parsed.data.replyToId || null);
+  const parsed = z.object({ body: z.string().trim().max(4000).optional().default('') }).safeParse(req.body);
+  if (!parsed.success || (!parsed.data.body && !req.file)) return res.status(400).json({ error: 'Message or attachment is required.' });
+  const attachment = req.file ? { url: `/uploads/${req.file.filename}`, name: req.file.originalname, type: req.file.mimetype, size: req.file.size } : null;
+  const result = db.prepare('INSERT INTO messages (conversation_id, sender_id, body, reply_to_id, attachment_url, attachment_name, attachment_type, attachment_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(req.params.id, req.user.id, parsed.data.body, null, attachment?.url || null, attachment?.name || null, attachment?.type || null, attachment?.size || null);
   db.prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
-  const message = db.prepare(`SELECT m.id, m.conversation_id AS conversationId, m.body, m.status, m.reply_to_id AS replyToId, m.created_at AS createdAt, m.sender_id AS senderId, u.name AS senderName, u.username AS senderUsername FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ?`).get(result.lastInsertRowid);
+  const message = db.prepare(`SELECT m.id, m.conversation_id AS conversationId, m.body, m.status, m.reply_to_id AS replyToId, m.created_at AS createdAt, m.sender_id AS senderId, m.attachment_url AS attachmentUrl, m.attachment_name AS attachmentName, m.attachment_type AS attachmentType, m.attachment_size AS attachmentSize, u.name AS senderName, u.username AS senderUsername FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ?`).get(result.lastInsertRowid);
   req.app.get('io')?.to(`conversation:${req.params.id}`).emit('message:new', message);
   res.status(201).json({ message });
 });

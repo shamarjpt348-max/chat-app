@@ -40,6 +40,7 @@ io.on('connection', (socket) => {
   const userId = socket.user.id;
   if (!onlineUsers.has(userId)) onlineUsers.set(userId, new Set());
   onlineUsers.get(userId).add(socket.id);
+  socket.emit('presence:initial', { userIds: [...onlineUsers.keys()] });
   io.emit('presence:update', { userId, online: true });
 
   socket.on('conversation:join', (conversationId) => socket.join(`conversation:${conversationId}`));
