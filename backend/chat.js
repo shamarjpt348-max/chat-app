@@ -4,7 +4,12 @@ import { db } from './db.js';
 
 export const chatRouter = express.Router();
 const userSelect = `SELECT u.id, u.name, u.username, u.about, u.avatar_url AS avatarUrl, u.last_seen AS lastSeen FROM users u`;
-const conversationFor = (id, userId) => db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id != ? AND m.status != 'read') AS unreadCount, (SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS lastMessage, (SELECT created_at FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS lastMessageAt, (SELECT json_group_array(json_object('id', u.id, 'name', u.name, 'username', u.username, 'avatarUrl', u.avatar_url, 'about', u.about, 'lastSeen', u.last_seen)) FROM conversation_members cm JOIN users u ON u.id = cm.user_id WHERE cm.conversation_id = c.id) AS members FROM conversations c JOIN conversation_members me ON me.conversation_id = c.id WHERE c.id = ? AND me.user_id = ?`).get(userId, id, userId);
+const conversationFor = (id, userId) => {
+  const conversation = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id != ? AND m.status != 'read') AS unreadCount, (SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS lastMessage, (SELECT created_at FROM messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS lastMessageAt, (SELECT json_group_array(json_object('id', u.id, 'name', u.name, 'username', u.username, 'avatarUrl', u.avatar_url, 'about', u.about, 'lastSeen', u.last_seen)) FROM conversation_members cm JOIN users u ON u.id = cm.user_id WHERE cm.conversation_id = c.id) AS members FROM conversations c JOIN conversation_members me ON me.conversation_id = c.id WHERE c.id = ? AND me.user_id = ?`).get(userId, id, userId);
+  if (!conversation) return conversation;
+  try { conversation.members = Array.isArray(conversation.members) ? conversation.members : JSON.parse(conversation.members || '[]'); } catch { conversation.members = []; }
+  return conversation;
+};
 const isMember = (conversationId, userId) => db.prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ?').get(conversationId, userId);
 
 chatRouter.get('/users', (req, res) => {
