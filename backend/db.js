@@ -56,6 +56,8 @@ for (const statement of [
   "ALTER TABLE messages ADD COLUMN attachment_name TEXT",
   "ALTER TABLE messages ADD COLUMN attachment_type TEXT",
   "ALTER TABLE messages ADD COLUMN attachment_size INTEGER",
+  "ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'text'",
+  "ALTER TABLE messages ADD COLUMN read_at DATETIME",
 ]) {
   try { db.exec(statement); } catch (error) { if (!error.message.includes('duplicate column name')) throw error; }
 }

@@ -80,7 +80,9 @@ backend/
 server.js       Express app, Socket.IO events, presence and typing
 ```
 
-Tables currently included: `users`, `conversations`, `conversation_members`, `messages`, and `blocked_users`. Passwords are bcrypt-hashed, protected API routes require a JWT, message access checks conversation membership, SQLite uses WAL mode, and message history is limited to 100 records per request.
+Tables currently included: `users`, `conversations`, `conversation_members`, `messages`, and `blocked_users`. Passwords are bcrypt-hashed, protected API routes require a JWT, message access checks conversation membership, SQLite uses WAL mode, message history is limited to 100 records per request, and messages retain `message_type`, `read_at`, and attachment metadata.
+
+Attachments are validated on both sides, limited to 10 MB, and stored under `UPLOAD_DIR` (default `uploads`). For real production deployment, point `UPLOAD_DIR` at persistent storage or replace the local upload adapter with an authenticated object-storage adapter. Render's free filesystem is ephemeral, so local uploads can disappear after restart. WebRTC uses a public STUN server for direct connections; a TURN service is still required for users behind restrictive NAT/firewalls and must be configured through environment variables before production use.
 
 ## Deploy free on Render
 
@@ -134,6 +136,7 @@ PORT=3001
 CLIENT_URL=http://localhost:5173
 JWT_SECRET=replace-with-a-long-random-secret
 ALLOW_EXTERNAL=true
+UPLOAD_DIR=uploads
 ```
 
 Never commit real secrets. No paid APIs, paid storage, SMS provider, email provider, or billing-dependent feature is included.
